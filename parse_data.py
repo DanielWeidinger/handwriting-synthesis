@@ -11,7 +11,6 @@ x = np.zeros([len(stroke_fnames), stroke_utils.MAX_STROKE_LEN, 3],
              dtype=np.float32)
 x_len = np.zeros([len(stroke_fnames)], dtype=np.int16)
 c = np.zeros([len(stroke_fnames), stroke_utils.MAX_CHAR_LEN], dtype=np.int8)
-c_one_hot = None
 c_len = np.zeros([len(stroke_fnames)], dtype=np.int8)
 w_id = np.zeros([len(stroke_fnames)], dtype=np.int16)
 valid_mask = np.zeros([len(stroke_fnames)], dtype=np.bool_)
@@ -28,16 +27,17 @@ for i, (stroke_fname, c_i, w_id_i) in enumerate(zip(stroke_fnames, transcription
     c[i, :len(c_i)] = c_i
     c_len[i] = len(c_i)
 
-    c_one_hot = np.zeros((*c.shape, np.uint(stroke_utils.alphabet_len)))
-    idx = np.arange(c.shape[1])
-    for i in range(len(c)):
-        current = c[i]
-        c_one_hot[i, idx, current] = 1
-
     w_id[i] = w_id_i
 
 if not os.path.isdir('data/processed'):
     os.makedirs('data/processed')
+
+
+c_one_hot = np.zeros((*c.shape, np.uint(stroke_utils.alphabet_len)))
+idx = np.arange(c.shape[1])
+for i in range(len(c)):
+    current = c[i]
+    c_one_hot[i, idx, current] = 1
 
 np.save('data/processed/x.npy', x[valid_mask])
 np.save('data/processed/x_len.npy', x_len[valid_mask])

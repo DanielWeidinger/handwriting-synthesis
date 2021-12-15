@@ -40,9 +40,11 @@ def get_ascii_sequences(filename):
     return lines
 
 
-def collect_data():
+def collect_data(DEBUG=False):
     fnames = []
-    for dirpath, dirnames, filenames in os.walk('data/raw/ascii/'):
+    for i, (dirpath, dirnames, filenames) in enumerate(os.walk('data/raw/ascii/')):
+        if DEBUG and i == 10:
+            break
         if dirnames:
             continue
         for filename in filenames:

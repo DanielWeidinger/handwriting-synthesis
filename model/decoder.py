@@ -13,7 +13,8 @@ class Decoder(Model):
         self.seq_len = seq_len
         # self.pes = pes
 
-        self.embedding = tf.keras.layers.Embedding(3, model_size)
+        # self.embedding = tf.keras.layers.Embedding(3, model_size)
+        self.expand_dims_dense = tf.keras.layers.Dense(model_size)
         self.attention_bot = [MultiHeadAttention(
             model_size, h) for _ in range(num_layers)]
         self.attention_bot_norm = [
@@ -36,10 +37,11 @@ class Decoder(Model):
 
     def call(self, sequence, encoder_output, padding_mask):
         # EMBEDDING AND POSITIONAL EMBEDDING
+        # TODO: try with embedding and pos encoding
         # embed_out = embedding(sequence)
         # embed_out += pes[:sequence.shape[1], :]
 
-        bot_sub_in = sequence  # embed_out
+        bot_sub_in = self.expand_dims_dense(sequence)  # embed_out
         ffn_out = None
 
         for i in range(self.num_layers):

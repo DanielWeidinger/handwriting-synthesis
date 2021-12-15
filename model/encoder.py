@@ -12,7 +12,9 @@ class Encoder(Model):
         self.pes = pes
 
         # One Embedding layer
-        self.embedding = layers.Embedding(vocab_size, model_size)
+        # TODO: try with embedding
+        # self.embedding = layers.Embedding(vocab_size, model_size)
+        self.expand_dims_dense = layers.Dense(model_size)
 
         # num_layers Multi-Head Attention and Normalization layers
         self.attention = [MultiHeadAttention(
@@ -31,7 +33,9 @@ class Encoder(Model):
         # padding_mask will have the same shape as the input sequence
         # padding_mask will be used in the Decoder too
         # so we need to create it outside the Encoder
-        embed_out = self.embedding(sequence)
+        # embed_out = self.embedding(sequence)
+        # embed_out += self.pes[:sequence.shape[1], :]
+        embed_out = self.expand_dims_dense(sequence)
         embed_out += self.pes[:sequence.shape[1], :]
 
         sub_in = embed_out

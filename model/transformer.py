@@ -29,7 +29,7 @@ class Transformer(Model):
 
         self.encoder = Encoder(
             su.alphabet_len, model_size, num_layers, h, pes_alph)
-        self.decoder = Decoder(su.MAX_CHAR_LEN, model_size, num_layers, h)
+        self.decoder = Decoder(su.MAX_STROKE_LEN, model_size, num_layers, h)
 
     def __call__(self, test):
         pass
@@ -47,8 +47,10 @@ class Transformer(Model):
     @tf.function
     def train_step(self, source_seq, target_seq_in, target_seq_out):
         with tf.GradientTape() as tape:
+            padding_seq = tf.squeeze(source_seq[:, :, :1])
+            # TODO: fix so that /x00 is not in the alphabet but rather the marking of padding
             padding_mask = 1 - \
-                tf.cast(tf.equal(source_seq, 0), dtype=tf.float32)
+                tf.cast(tf.equal(padding_seq, 0), dtype=tf.float32)
 
             # Manually add two more dimentions
             # so that the mask's shape becomes (batch_size, 1, 1, seq_len)
@@ -62,7 +64,8 @@ class Transformer(Model):
 
             loss = Transformer.loss_func(target_seq_out, decoder_output)
 
-        variables = self.encoder.trainable_variables + self.decoder.trainable_variables
+        # variables = self.encoder.trainable_variables + self.decoder.trainable_variables
+        variables = self.trainable_variables
         gradients = tape.gradient(loss, variables)
         self.optimizer.apply_gradients(zip(gradients, variables))
 

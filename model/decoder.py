@@ -31,6 +31,7 @@ class Decoder(Model):
         self.ffn_norm = [tf.keras.layers.BatchNormalization()
                          for _ in range(num_layers)]
 
+        # TODO: try with non-linearity in dense
         self.coords_dense = tf.keras.layers.Dense(2)  # x and y
         self.eos_prob = tf.keras.layers.Dense(
             1, activation="sigmoid")  # x and y

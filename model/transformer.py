@@ -35,14 +35,22 @@ class Transformer(Model):
         pass
 
     @staticmethod
-    def loss_func(targets, logits):
-        crossentropy = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True)
-        mask = tf.math.logical_not(tf.math.equal(targets, 0))
-        mask = tf.cast(mask, dtype=tf.int64)
-        loss = crossentropy(targets, logits, sample_weight=mask)
+    def loss_func(label, logits):
+        coords_label, eos_prob_label = (label[:, :, :2], label[:, :, 2:])
+        coords_pred, eos_prob_pred = logits
 
-        return loss
+        # End of sentence probability
+        crossentropy = tf.keras.losses.BinaryCrossentropy()
+        mask = tf.math.logical_not(tf.math.equal(eos_prob_label, 0))
+        mask = tf.cast(mask, dtype=tf.int64)
+        loss_eos = crossentropy(
+            eos_prob_label, eos_prob_pred, sample_weight=mask)
+
+        # Coordinates (regression therefore MSE)
+        mse = tf.keras.losses.MeanSquaredError()
+        loss_coords = mse(coords_label, coords_pred)
+
+        return loss_coords, loss_eos
 
     @tf.function
     def train_step(self, source_seq, target_seq_in, target_seq_out):
@@ -62,11 +70,13 @@ class Transformer(Model):
             decoder_output = self.decoder(
                 target_seq_in, encoder_output, padding_mask)
 
-            loss = Transformer.loss_func(target_seq_out, decoder_output)
+            loss_coords, loss_eos = Transformer.loss_func(
+                target_seq_out, decoder_output)
+            loss = loss_coords + loss_eos
 
         # variables = self.encoder.trainable_variables + self.decoder.trainable_variables
         variables = self.trainable_variables
         gradients = tape.gradient(loss, variables)
         self.optimizer.apply_gradients(zip(gradients, variables))
 
-        return loss
+        return loss, loss_coords, loss_eos

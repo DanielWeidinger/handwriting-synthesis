@@ -1,57 +1,68 @@
-from tensorflow.keras import Model, layers
+import tensorflow as tf
+from tensorflow.keras import layers
 
 from model.multi_head_attention import MultiHeadAttention
+from model.utils import point_wise_feed_forward_network, positional_encoding
 
 
-class Encoder(Model):
-    def __init__(self, vocab_size, model_size, num_layers, h, pes):
+class EncoderLayer(layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1):
+        super(EncoderLayer, self).__init__()
+
+        self.mha = MultiHeadAttention(d_model, num_heads)
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = layers.Dropout(rate)
+        self.dropout2 = layers.Dropout(rate)
+
+    def call(self, x, training, mask):
+
+        # (batch_size, input_seq_len, d_model)
+        attn_output, _ = self.mha(x, x, x, mask)
+        attn_output = self.dropout1(attn_output, training=training)
+        # (batch_size, input_seq_len, d_model)
+        out1 = self.layernorm1(x + attn_output)
+
+        ffn_output = self.ffn(out1)  # (batch_size, input_seq_len, d_model)
+        ffn_output = self.dropout2(ffn_output, training=training)
+        # (batch_size, input_seq_len, d_model)
+        out2 = self.layernorm2(out1 + ffn_output)
+
+        return out2
+
+
+class Encoder(layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff, input_vocab_size,
+                 maximum_position_encoding, rate=0.1):
         super(Encoder, self).__init__()
-        self.model_size = model_size
+
+        self.d_model = d_model
         self.num_layers = num_layers
-        self.h = h
-        self.pes = pes
 
-        # One Embedding layer
-        # TODO: try with embedding
-        # self.embedding = layers.Embedding(vocab_size, model_size)
-        self.expand_dims_dense = layers.Dense(model_size)
+        self.embedding = layers.Embedding(input_vocab_size, d_model)
+        self.pos_encoding = positional_encoding(maximum_position_encoding,
+                                                self.d_model)
 
-        # num_layers Multi-Head Attention and Normalization layers
-        self.attention = [MultiHeadAttention(
-            model_size, h) for _ in range(num_layers)]
-        self.attention_norm = [layers.BatchNormalization()
-                               for _ in range(num_layers)]
+        self.enc_layers = [EncoderLayer(d_model, num_heads, dff, rate)
+                           for _ in range(num_layers)]
 
-        # num_layers FFN and Normalization layers
-        self.dense_1 = [layers.Dense(
-            model_size * 4, activation='relu') for _ in range(num_layers)]
-        self.dense_2 = [layers.Dense(model_size) for _ in range(num_layers)]
-        self.ffn_norm = [layers.BatchNormalization()
-                         for _ in range(num_layers)]
+        self.dropout = layers.Dropout(rate)
 
-    def call(self, sequence, padding_mask):
-        # padding_mask will have the same shape as the input sequence
-        # padding_mask will be used in the Decoder too
-        # so we need to create it outside the Encoder
-        # embed_out = self.embedding(sequence)
-        # embed_out += self.pes[:sequence.shape[1], :]
-        embed_out = self.expand_dims_dense(sequence)
-        embed_out += self.pes[:sequence.shape[1], :]
+    def call(self, x, training, mask):
 
-        sub_in = embed_out
-        ffn_out = None
+        seq_len = tf.shape(x)[1]
+
+        # adding embedding and position encoding.
+        x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
+        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x += self.pos_encoding[:, :seq_len, :]
+
+        x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
-            sub_out = self.attention[i](sub_in, sub_in, padding_mask)
-            sub_out = sub_in + sub_out
-            sub_out = self.attention_norm[i](sub_out)
+            x = self.enc_layers[i](x, training, mask)
 
-            ffn_in = sub_out
-
-            ffn_out = self.dense_2[i](self.dense_1[i](ffn_in))
-            ffn_out = ffn_in + ffn_out
-            ffn_out = self.ffn_norm[i](ffn_out)
-
-            sub_in = ffn_out
-
-        return ffn_out
+        return x  # (batch_size, input_seq_len, d_model)

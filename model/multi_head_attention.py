@@ -1,47 +1,59 @@
 import tensorflow as tf
+from tensorflow.keras import layers
 from tensorflow.keras import Model
 
+from model.utils import scaled_dot_product_attention
 
-class MultiHeadAttention(Model):
-    def __init__(self, model_size, h):
+
+class MultiHeadAttention(layers.Layer):
+    def __init__(self, d_model, num_heads):
         super(MultiHeadAttention, self).__init__()
-        self.key_size = model_size // h
-        self.h = h
-        # [tf.keras.layers.Dense(key_size) for _ in range(h)]
-        self.wq = tf.keras.layers.Dense(model_size)
-        # [tf.keras.layers.Dense(key_size) for _ in range(h)]
-        self.wk = tf.keras.layers.Dense(model_size)
-        # [tf.keras.layers.Dense(value_size) for _ in range(h)]
-        self.wv = tf.keras.layers.Dense(model_size)
-        self.wo = tf.keras.layers.Dense(model_size)
+        self.num_heads = num_heads
+        self.d_model = d_model
 
-    def call(self, decoder_output, encoder_output, mask=None):
-        query = self.wq(decoder_output)
-        key = self.wk(encoder_output)
-        value = self.wv(encoder_output)
+        assert d_model % self.num_heads == 0
 
-        # Split for multihead attention
-        batch_size = query.shape[0]
-        query = tf.reshape(query, [batch_size, -1, self.h, self.key_size])
-        query = tf.transpose(query, [0, 2, 1, 3])
-        key = tf.reshape(key, [batch_size, -1, self.h, self.key_size])
-        key = tf.transpose(key, [0, 2, 1, 3])
-        value = tf.reshape(value, [batch_size, -1, self.h, self.key_size])
-        value = tf.transpose(value, [0, 2, 1, 3])
+        self.depth = d_model // self.num_heads
 
-        score = tf.matmul(query, key, transpose_b=True)
-        score /= tf.math.sqrt(tf.dtypes.cast(self.key_size, dtype=tf.float32))
+        self.wq = tf.keras.layers.Dense(d_model)
+        self.wk = tf.keras.layers.Dense(d_model)
+        self.wv = tf.keras.layers.Dense(d_model)
 
-        if mask is not None:
-            score *= mask
-            score = tf.where(tf.equal(score, 0),
-                             tf.ones_like(score) * -1e9, score)
+        self.dense = tf.keras.layers.Dense(d_model)
 
-        alignment = tf.nn.softmax(score, axis=-1)
-        context = tf.matmul(alignment, value)
-        context = tf.transpose(context, [0, 2, 1, 3])
-        context = tf.reshape(context, [batch_size, -1, self.key_size * self.h])
+    def split_heads(self, x, batch_size):
+        """Split the last dimension into (num_heads, depth).
+        Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
+        """
+        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
+        return tf.transpose(x, perm=[0, 2, 1, 3])
 
-        heads = self.wo(context)
-        # heads has shape (batch, decoder_len, model_size)
-        return heads
+    def call(self, v, k, q, mask):
+        batch_size = tf.shape(q)[0]
+
+        q = self.wq(q)  # (batch_size, seq_len, d_model)
+        k = self.wk(k)  # (batch_size, seq_len, d_model)
+        v = self.wv(v)  # (batch_size, seq_len, d_model)
+
+        # (batch_size, num_heads, seq_len_q, depth)
+        q = self.split_heads(q, batch_size)
+        # (batch_size, num_heads, seq_len_k, depth)
+        k = self.split_heads(k, batch_size)
+        # (batch_size, num_heads, seq_len_v, depth)
+        v = self.split_heads(v, batch_size)
+
+        # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
+        # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
+        scaled_attention, attention_weights = scaled_dot_product_attention(
+            q, k, v, mask)
+
+        # (batch_size, seq_len_q, num_heads, depth)
+        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
+
+        concat_attention = tf.reshape(scaled_attention,
+                                      (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+
+        # (batch_size, seq_len_q, d_model)
+        output = self.dense(concat_attention)
+
+        return output, attention_weights

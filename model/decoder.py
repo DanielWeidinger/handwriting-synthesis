@@ -1,78 +1,86 @@
 import tensorflow as tf
-from tensorflow.keras import Model
+from tensorflow.keras import layers
 
 from model.multi_head_attention import MultiHeadAttention
+from model.utils import point_wise_feed_forward_network, positional_encoding
 
 
-class Decoder(Model):
-    def __init__(self, seq_len, model_size, num_layers, h):
+class DecoderLayer(layers.Layer):
+    def __init__(self, d_model, num_heads, dff, rate=0.1):
+        super(DecoderLayer, self).__init__()
+
+        self.mha1 = MultiHeadAttention(d_model, num_heads)
+        self.mha2 = MultiHeadAttention(d_model, num_heads)
+
+        self.ffn = point_wise_feed_forward_network(d_model, dff)
+
+        self.layernorm1 = layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm2 = layers.LayerNormalization(epsilon=1e-6)
+        self.layernorm3 = layers.LayerNormalization(epsilon=1e-6)
+
+        self.dropout1 = layers.Dropout(rate)
+        self.dropout2 = layers.Dropout(rate)
+        self.dropout3 = layers.Dropout(rate)
+
+    def call(self, x, enc_output, training,
+             look_ahead_mask, padding_mask):
+        # enc_output.shape == (batch_size, input_seq_len, d_model)
+
+        # (batch_size, target_seq_len, d_model)
+        attn1, attn_weights_block1 = self.mha1(x, x, x, look_ahead_mask)
+        attn1 = self.dropout1(attn1, training=training)
+        out1 = self.layernorm1(attn1 + x)
+
+        attn2, attn_weights_block2 = self.mha2(
+            enc_output, enc_output, out1, padding_mask)  # (batch_size, target_seq_len, d_model)
+        attn2 = self.dropout2(attn2, training=training)
+        # (batch_size, target_seq_len, d_model)
+        out2 = self.layernorm2(attn2 + out1)
+
+        ffn_output = self.ffn(out2)  # (batch_size, target_seq_len, d_model)
+        ffn_output = self.dropout3(ffn_output, training=training)
+        # (batch_size, target_seq_len, d_model)
+        out3 = self.layernorm3(ffn_output + out2)
+
+        return out3, attn_weights_block1, attn_weights_block2
+
+
+class Decoder(layers.Layer):
+    def __init__(self, num_layers, d_model, num_heads, dff,
+                 maximum_position_encoding, rate=0.1):
         super(Decoder, self).__init__()
-        self.model_size = model_size
+
+        self.d_model = d_model
         self.num_layers = num_layers
-        self.h = h
-        self.seq_len = seq_len
-        # self.pes = pes
 
-        # self.embedding = tf.keras.layers.Embedding(3, model_size)
-        self.expand_dims_dense = tf.keras.layers.Dense(model_size)
-        self.attention_bot = [MultiHeadAttention(
-            model_size, h) for _ in range(num_layers)]
-        self.attention_bot_norm = [
-            tf.keras.layers.BatchNormalization() for _ in range(num_layers)]
-        self.attention_mid = [MultiHeadAttention(
-            model_size, h) for _ in range(num_layers)]
-        self.attention_mid_norm = [
-            tf.keras.layers.BatchNormalization() for _ in range(num_layers)]
+        # self.embedding = layers.Embedding(target_vocab_size, d_model)
+        self.expand_dims_dense = tf.keras.layers.Dense(d_model)
+        self.pos_encoding = positional_encoding(
+            maximum_position_encoding, d_model)
 
-        self.dense_1 = [tf.keras.layers.Dense(
-            model_size * 4, activation='relu') for _ in range(num_layers)]
-        self.dense_2 = [tf.keras.layers.Dense(
-            model_size) for _ in range(num_layers)]
-        self.ffn_norm = [tf.keras.layers.BatchNormalization()
-                         for _ in range(num_layers)]
+        self.dec_layers = [DecoderLayer(d_model, num_heads, dff, rate)
+                           for _ in range(num_layers)]
+        self.dropout = layers.Dropout(rate)
 
-        # TODO: try with non-linearity in dense
-        self.coords_dense = tf.keras.layers.Dense(2)  # x and y
-        self.eos_prob = tf.keras.layers.Dense(
-            1, activation="sigmoid")  # x and y
+    def call(self, x, enc_output, training,
+             look_ahead_mask, padding_mask):
 
-    def call(self, sequence, encoder_output, padding_mask):
-        # EMBEDDING AND POSITIONAL EMBEDDING
-        # TODO: try with embedding and pos encoding
-        # embed_out = embedding(sequence)
-        # embed_out += pes[:sequence.shape[1], :]
+        seq_len = tf.shape(x)[1]
+        attention_weights = {}
 
-        bot_sub_in = self.expand_dims_dense(sequence)  # embed_out
-        ffn_out = None
+        # x = self.embedding(x)  # (batch_size, target_seq_len, d_model)
+        x = self.expand_dims_dense(x)
+        x *= tf.math.sqrt(tf.cast(self.d_model, tf.float32))
+        x += self.pos_encoding[:, :seq_len, :]
+
+        x = self.dropout(x, training=training)
 
         for i in range(self.num_layers):
-            # BOTTOM MULTIHEAD SUB LAYER
+            x, block1, block2 = self.dec_layers[i](x, enc_output, training,
+                                                   look_ahead_mask, padding_mask)
 
-            look_left_only_mask = tf.linalg.band_part(
-                tf.ones((self.seq_len, self.seq_len)), -1, 0)
-            bot_sub_out = self.attention_bot[i](
-                bot_sub_in, bot_sub_in, look_left_only_mask)
-            bot_sub_out = bot_sub_in + bot_sub_out
-            bot_sub_out = self.attention_bot_norm[i](bot_sub_out)
+            attention_weights[f'decoder_layer{i+1}_block1'] = block1
+            attention_weights[f'decoder_layer{i+1}_block2'] = block2
 
-            # MIDDLE MULTIHEAD SUB LAYER
-            mid_sub_in = bot_sub_out
-
-            mid_sub_out = self.attention_mid[i](
-                mid_sub_in, encoder_output, padding_mask)
-            mid_sub_out = mid_sub_out + mid_sub_in
-            mid_sub_out = self.attention_mid_norm[i](mid_sub_out)
-
-            # FFN
-            ffn_in = mid_sub_out
-
-            ffn_out = self.dense_2[i](self.dense_1[i](ffn_in))
-            ffn_out = ffn_out + ffn_in
-            ffn_out = self.ffn_norm[i](ffn_out)
-
-            bot_sub_in = ffn_out
-
-        coords_logits = self.coords_dense(ffn_out)
-        eos_prob = self.eos_prob(ffn_out)
-
-        return coords_logits, eos_prob
+        # x.shape == (batch_size, target_seq_len, d_model)
+        return x, attention_weights

@@ -43,16 +43,17 @@ if not os.path.isdir('data/processed'):
     os.makedirs('data/processed')
 
 
-c_one_hot = np.zeros((*c.shape, np.uint(stroke_utils.alphabet_len)))
-idx = np.arange(c.shape[1])
-for i in range(len(c)):
-    current = c[i]
-    c_one_hot[i, idx, current] = 1
+# c_one_hot = np.zeros((*c.shape, np.uint(stroke_utils.alphabet_len)))
+# idx = np.arange(c.shape[1])
+# for i in range(len(c)):
+#     current = c[i]
+#     c_one_hot[i, idx, current] = 1
+# c=c_one_hot
 
 np.save('data/processed/x.npy', x[valid_mask])
 np.save('data/processed/x_in.npy', x_in[valid_mask])
 np.save('data/processed/x_out.npy', x_out[valid_mask])
 np.save('data/processed/x_len.npy', x_len[valid_mask])
-np.save('data/processed/c.npy', c_one_hot[valid_mask])
+np.save('data/processed/c.npy', c[valid_mask])
 np.save('data/processed/c_len.npy', c_len[valid_mask])
 np.save('data/processed/w_id.npy', w_id[valid_mask])

@@ -1,11 +1,12 @@
 import tensorflow as tf
 import numpy as np
 import time
+from model.training import accuracy_func
 from tqdm import tqdm
 
 from model.transformer import Transformer
 
-NUM_EPOCHS = 1
+EPOCHS = 1
 model = Transformer()
 
 strokes_in = np.load('data/processed/x_in.npy')
@@ -18,10 +19,10 @@ TRAIN_SPLIT = 0.7
 
 train_len = int(len(strokes_in)*TRAIN_SPLIT)
 # TODO: wrong x and y naming, coz that are not the labels
-x_train = (strokes_in[train_len:], strokes_out[train_len:])
-y_train = chars[train_len:]
-x_val = (strokes_in[:train_len], strokes_out[:train_len])
-y_val = chars[:train_len]
+x_train = (chars[train_len:], strokes_in[train_len:])
+y_train = strokes_out[train_len:]
+x_val = (chars[:train_len], strokes_in[:train_len])
+y_val = strokes_out[:train_len]
 
 train_dataset = tf.data.Dataset.from_tensor_slices((*x_train, y_train))
 test_dataset = tf.data.Dataset.from_tensor_slices((*x_val, y_val))
@@ -29,17 +30,46 @@ test_dataset = tf.data.Dataset.from_tensor_slices((*x_val, y_val))
 train_dataset = train_dataset.shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE)
 test_dataset = test_dataset.batch(BATCH_SIZE)
 
-start_time = time.time()
-loss, loss_coords, loss_eos = tf.constant(0)
-for e in range(NUM_EPOCHS):
-    for step, (strokes_in, strokes_out, chars) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
-        # loss, loss_coords, loss_eos =
-        loss, loss_coords, loss_eos = model.train_step(
-            chars, strokes_in, strokes_out)
 
-    print('Epoch {} Loss {:.4f} Coords: {:.4f} EoS: {:.4f}'.format(
-        e + 1, loss.numpy(), loss_coords.numpy(), loss_eos.numpy()))
+checkpoint_path = "./checkpoints/train"
+ckpt = tf.train.Checkpoint(transformer=model,
+                           optimizer=model.optimizer)
+ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+# if a checkpoint exists, restore the latest checkpoint.
+if ckpt_manager.latest_checkpoint:
+    ckpt.restore(ckpt_manager.latest_checkpoint)
+    print('Latest checkpoint restored!!')
 
-    end_time = time.time()
-    print('Average elapsed time: {:.2f}s'.format(
-        (end_time - start_time) / (e + 1)))
+
+# metrics
+train_loss = tf.keras.metrics.Mean(name='train_loss')
+train_eos_accuracy = tf.keras.metrics.Mean(name='train_accuracy')
+train_avg_error_distance = tf.keras.metrics.Mean(name='train_accuracy')
+
+for epoch in range(EPOCHS):
+    start = time.time()
+
+    train_loss.reset_states()
+    train_eos_accuracy.reset_states()
+    train_avg_error_distance.reset_states()
+
+    # inp -> portuguese, tar -> english
+    for batch, (inp, tar_inp, tar_out) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
+        (coords, eos), loss = model.train_step(inp, tar_inp, tar_out)
+        predictions = tf.concat([coords, eos], -1)
+        print("lol", predictions)
+        train_loss(loss)
+        train_eos_accuracy(accuracy_func(tar_out, predictions))
+
+        if batch % 50 == 0:
+            print(
+                f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
+
+    if (epoch + 1) % 5 == 0:
+        ckpt_save_path = ckpt_manager.save()
+        print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
+
+    print(
+        f'Epoch {epoch + 1} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
+
+    print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')

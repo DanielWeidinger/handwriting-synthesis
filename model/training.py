@@ -42,15 +42,20 @@ def loss_func(label, logits, eos_loss_obj, coords_loss_obj):
     return loss_coords, loss_eos
 
 
-def accuracy_func(real, pred, threshold=0.8):
-    real = real[:, :, 2:]
+def eos_accuracy(real, pred, threshold=0.8):
+    real = tf.cast(real[:, :, 2:], dtype=tf.int64)
     pred = pred[:, :, 2:]
-    print(real)
-    accuracies = tf.equal(real, tf.where(pred > threshold))
-
-    mask = tf.math.logical_not(tf.math.equal(real, 0))
-    accuracies = tf.math.logical_and(mask, accuracies)
+    accuracies = tf.equal(real, tf.cast(pred > threshold, dtype=tf.int64))
 
     accuracies = tf.cast(accuracies, dtype=tf.float32)
-    mask = tf.cast(mask, dtype=tf.float32)
-    return tf.reduce_sum(accuracies)/tf.reduce_sum(mask)
+    return tf.reduce_sum(accuracies)/accuracies.shape[-2]
+
+
+def avg_error_distance(real, pred):
+    real = real[:, :, :2]
+    pred = pred[:, :, :2]
+    vectors = real - pred
+    vec_length = tf.math.sqrt(tf.math.add(tf.math.square(
+        vectors[:, :, :1]), tf.math.square(vectors[:, :, 1:2])))
+
+    return tf.reduce_sum(vec_length)/vec_length.shape[-2]

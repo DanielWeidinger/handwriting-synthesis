@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import time
-from model.training import accuracy_func
+from model.training import avg_error_distance, eos_accuracy
 from tqdm import tqdm
 
 from model.transformer import Transformer
@@ -59,17 +59,18 @@ for epoch in range(EPOCHS):
         predictions = tf.concat([coords, eos], -1)
         print("lol", predictions)
         train_loss(loss)
-        train_eos_accuracy(accuracy_func(tar_out, predictions))
+        train_eos_accuracy(eos_accuracy(tar_out, predictions))
+        train_avg_error_distance(avg_error_distance(tar_out, predictions))
 
         if batch % 50 == 0:
             print(
-                f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
+                f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} EoS_Accuracy {train_eos_accuracy.result():.4f} Avg Coords Distance: {train_avg_error_distance.result():.4f}')
 
     if (epoch + 1) % 5 == 0:
         ckpt_save_path = ckpt_manager.save()
         print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
     print(
-        f'Epoch {epoch + 1} Loss {train_loss.result():.4f} Accuracy {train_accuracy.result():.4f}')
+        f'Epoch {epoch + 1} Loss {train_loss.result():.4f} EoS_Accuracy {train_eos_accuracy.result():.4f} Avg Coords Distance: {train_avg_error_distance.result():.4f}')
 
     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')

@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from model.transformer import Transformer
 
-EPOCHS = 1
+EPOCHS = 10
 model = Transformer()
 
 strokes_in = np.load('data/processed/x_in.npy')
@@ -15,7 +15,7 @@ chars = np.load('data/processed/c.npy')
 
 BATCH_SIZE = 32
 SHUFFLE_BUFFER_SIZE = 100
-TRAIN_SPLIT = 0.7
+TRAIN_SPLIT = 0.8
 
 train_len = int(len(strokes_in)*TRAIN_SPLIT)
 # TODO: wrong x and y naming, coz that are not the labels
@@ -28,7 +28,7 @@ train_dataset = tf.data.Dataset.from_tensor_slices((*x_train, y_train))
 test_dataset = tf.data.Dataset.from_tensor_slices((*x_val, y_val))
 
 train_dataset = train_dataset.shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE)
-test_dataset = test_dataset.batch(BATCH_SIZE)
+test_dataset = test_dataset.batch(BATCH_SIZE)  # TODO: use!
 
 
 checkpoint_path = "./checkpoints/train"
@@ -57,7 +57,6 @@ for epoch in range(EPOCHS):
     for batch, (inp, tar_inp, tar_out) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
         (coords, eos), loss = model.train_step(inp, tar_inp, tar_out)
         predictions = tf.concat([coords, eos], -1)
-        print("lol", predictions)
         train_loss(loss)
         train_eos_accuracy(eos_accuracy(tar_out, predictions))
         train_avg_error_distance(avg_error_distance(tar_out, predictions))

@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 
 
@@ -26,18 +27,21 @@ def get_optimizer(d_model):
     return optimizer
 
 
-def loss_func(label, logits, eos_loss_obj, coords_loss_obj):
+def loss_func(label, logits, label_len, eos_loss_obj, coords_loss_obj):
     coords_label, eos_prob_label = (label[:, :, :2], label[:, :, 2:])
     coords_pred, eos_prob_pred = logits
 
     # End of sentence probability
-    mask = tf.math.logical_not(tf.math.equal(eos_prob_label, 0))
-    mask = tf.cast(mask, dtype=tf.int64)
+    tmp_mask = np.zeros(label.shape[:2])
+    for i, l in enumerate(label_len):
+        tmp_mask[i, :l] = 1
+    mask = tf.convert_to_tensor(tmp_mask, dtype=tf.float32)
     loss_eos = eos_loss_obj(
         eos_prob_label, eos_prob_pred, sample_weight=mask)
 
     # Coordinates (regression therefore MSE)
-    loss_coords = coords_loss_obj(coords_label, coords_pred)
+    loss_coords = coords_loss_obj(
+        coords_label, coords_pred, sample_weight=mask)
 
     return loss_coords, loss_eos
 
@@ -48,7 +52,7 @@ def eos_accuracy(real, pred, threshold=0.8):
     accuracies = tf.equal(real, tf.cast(pred > threshold, dtype=tf.int64))
 
     accuracies = tf.cast(accuracies, dtype=tf.float32)
-    return tf.reduce_sum(accuracies)/accuracies.shape[-2]
+    return tf.reduce_sum(accuracies)/accuracies.shape[1]
 
 
 def avg_error_distance(real, pred):
@@ -58,4 +62,4 @@ def avg_error_distance(real, pred):
     vec_length = tf.math.sqrt(tf.math.add(tf.math.square(
         vectors[:, :, :1]), tf.math.square(vectors[:, :, 1:2])))
 
-    return tf.reduce_sum(vec_length)/vec_length.shape[-2]
+    return tf.reduce_sum(vec_length)/vec_length.shape[1]

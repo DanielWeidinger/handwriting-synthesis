@@ -76,13 +76,13 @@ class Transformer(Model):
     # batch sizes (the last batch is smaller), use input_signature to specify
     # more generic shapes.
     # (input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64)])
-    @tf.function()
-    def train_step(self, inp, tar_inp, tar_out):
+    # @tf.function()
+    def train_step(self, inp, tar_inp, tar_out, tar_len):
         with tf.GradientTape() as tape:
             predictions, _ = self([inp, tar_inp],
                                   training=True)
             eos_loss, coords_loss = loss_func(
-                tar_out, predictions, self.crossentropy, self.mse)
+                tar_out, predictions, tar_len, self.crossentropy, self.mse)
             loss = eos_loss + coords_loss
 
         gradients = tape.gradient(loss, self.trainable_variables)

@@ -7,9 +7,10 @@ from model.training import avg_error_distance
 # real = tf.constant(
 #     [[[1., 1., 0.], [2., 2., 0.], [3., 3., 1.]]], dtype=tf.float32)
 real = tf.constant(
-    [[[1, 1, 0], [1, 1, 0], [1, 1, 1]]], dtype=tf.float32)
+    [[[1, 1, 0], [1, 1, 0], [1, 1, 1]], [[1, 1, 0], [1, 1, 0], [1, 1, 1]]], dtype=tf.float32)
 pred = tf.constant(
     [[[0., 0., 0.9], [0., 0., 0.7], [0., 0., 0.9]]], dtype=tf.float32)
 
-result = avg_error_distance(real, pred)
-print(result)
+real * [0, 1]
+# result = avg_error_distance(real, pred)
+# print(result)

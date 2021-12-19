@@ -42,7 +42,6 @@ for i, (stroke_fname, c_i, w_id_i) in enumerate(zip(stroke_fnames, transcription
 if not os.path.isdir('data/processed'):
     os.makedirs('data/processed')
 
-
 # c_one_hot = np.zeros((*c.shape, np.uint(stroke_utils.alphabet_len)))
 # idx = np.arange(c.shape[1])
 # for i in range(len(c)):

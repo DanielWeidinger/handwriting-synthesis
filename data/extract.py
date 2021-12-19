@@ -22,11 +22,12 @@ def get_stroke_sequence(filename):
 
     coords = stroke_utils.align(coords)
     coords = stroke_utils.denoise(coords)
-    offsets = stroke_utils.coords_to_offsets(coords)
-    offsets = offsets[:stroke_utils.MAX_STROKE_LEN]
+    coords = coords[:stroke_utils.MAX_STROKE_LEN]
+    # offsets = stroke_utils.coords_to_offsets(coords) #TODO: try with offset
+    # offsets = offsets[:stroke_utils.MAX_STROKE_LEN]
+    # offsets = stroke_utils.normalize(offsets)
 
-    offsets = stroke_utils.normalize(offsets)
-    return offsets
+    return coords
 
 
 def get_ascii_sequences(filename):

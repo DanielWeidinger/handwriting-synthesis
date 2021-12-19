@@ -76,7 +76,7 @@ class Transformer(Model):
     # batch sizes (the last batch is smaller), use input_signature to specify
     # more generic shapes.
     # (input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64)])
-    # @tf.function()
+    @tf.function()
     def train_step(self, inp, tar_inp, tar_out, tar_len):
         with tf.GradientTape() as tape:
             predictions, _ = self([inp, tar_inp],

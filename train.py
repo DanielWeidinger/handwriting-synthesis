@@ -19,18 +19,22 @@ BATCH_SIZE = 32
 SHUFFLE_BUFFER_SIZE = 100
 TRAIN_SPLIT = 0.8
 
+tar_mask = np.zeros(strokes_in.shape[:2])
+for i, l in enumerate(strokes_len):
+    tar_mask[i, :l] = 1
+
 train_len = int(len(strokes_in)*TRAIN_SPLIT)
 x_train = (chars[train_len:], strokes_in[train_len:])
 y_train = strokes_out[train_len:]
-len_train = strokes_len[train_len:]
+mask_train = tar_mask[train_len:]
 
 x_val = (chars[:train_len], strokes_in[:train_len])
 y_val = strokes_out[:train_len]
-len_val = strokes_len[:train_len]
+mask_val = tar_mask[:train_len]
 
 train_dataset = tf.data.Dataset.from_tensor_slices(
-    (*x_train, y_train, len_train))
-test_dataset = tf.data.Dataset.from_tensor_slices((*x_val, y_val, len_val))
+    (*x_train, y_train, mask_train))
+test_dataset = tf.data.Dataset.from_tensor_slices((*x_val, y_val, mask_val))
 
 train_dataset = train_dataset.shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE)
 test_dataset = test_dataset.batch(BATCH_SIZE)  # TODO: use!
@@ -59,8 +63,8 @@ for epoch in range(EPOCHS):
     train_avg_error_distance.reset_states()
 
     # inp -> portuguese, tar -> english
-    for batch, (inp, tar_inp, tar_out, tar_len) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
-        (coords, eos), loss = model.train_step(inp, tar_inp, tar_out, tar_len)
+    for batch, (inp, tar_inp, tar_out, tar_mask) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
+        (coords, eos), loss = model.train_step(inp, tar_inp, tar_out, tar_mask)
         predictions = tf.concat([coords, eos], -1)
         train_loss(loss)
         train_eos_accuracy(eos_accuracy(tar_out, predictions))

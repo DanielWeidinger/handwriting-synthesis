@@ -27,15 +27,11 @@ def get_optimizer(d_model):
     return optimizer
 
 
-def loss_func(label, logits, label_len, eos_loss_obj, coords_loss_obj):
+def loss_func(label, logits, mask, eos_loss_obj, coords_loss_obj):
     coords_label, eos_prob_label = (label[:, :, :2], label[:, :, 2:])
     coords_pred, eos_prob_pred = logits
 
     # End of sentence probability
-    tmp_mask = np.zeros(label.shape[:2])
-    for i, l in enumerate(label_len):
-        tmp_mask[i, :l] = 1
-    mask = tf.convert_to_tensor(tmp_mask, dtype=tf.float32)
     loss_eos = eos_loss_obj(
         eos_prob_label, eos_prob_pred, sample_weight=mask)
 

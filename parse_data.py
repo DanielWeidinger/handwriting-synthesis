@@ -27,7 +27,7 @@ for i, (stroke_fname, c_i, w_id_i) in enumerate(zip(stroke_fnames, transcription
         print(i, '\t', '/', len(stroke_fnames))
 
     x_i = get_stroke_sequence(stroke_fname)
-    valid_mask[i] = ~np.any(np.linalg.norm(x_i[:, :2], axis=1) > 60)
+    # valid_mask[i] = ~np.any(np.linalg.norm(x_i[:, :2], axis=1) > 60)
 
     x[i, :len(x_i), :] = x_i
     x_in[i, :len(x_i)-1, :] = x_i[:-1]
@@ -49,10 +49,10 @@ if not os.path.isdir('data/processed'):
 #     c_one_hot[i, idx, current] = 1
 # c=c_one_hot
 
-np.save('data/processed/x.npy', x[valid_mask])
-np.save('data/processed/x_in.npy', x_in[valid_mask])
-np.save('data/processed/x_out.npy', x_out[valid_mask])
-np.save('data/processed/x_len.npy', x_len[valid_mask])
-np.save('data/processed/c.npy', c[valid_mask])
-np.save('data/processed/c_len.npy', c_len[valid_mask])
-np.save('data/processed/w_id.npy', w_id[valid_mask])
+np.save('data/processed/x.npy', x)
+np.save('data/processed/x_in.npy', x_in)
+np.save('data/processed/x_out.npy', x_out)
+np.save('data/processed/x_len.npy', x_len)
+np.save('data/processed/c.npy', c)
+np.save('data/processed/c_len.npy', c_len)
+np.save('data/processed/w_id.npy', w_id)

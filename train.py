@@ -6,7 +6,7 @@ from tqdm import tqdm
 from model.training import avg_error_distance, eos_accuracy
 from model.transformer import Transformer
 
-EPOCHS = 10
+EPOCHS = 100
 model = Transformer()
 
 strokes_in = np.load('data/processed/x_in.npy')
@@ -64,15 +64,11 @@ for epoch in range(EPOCHS):
 
     # inp -> portuguese, tar -> english
     for batch, (inp, tar_inp, tar_out, tar_mask) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
-        (coords, eos), loss = model.train_step(inp, tar_inp, tar_out, tar_mask)
-        predictions = tf.concat([coords, eos], -1)
+        predictions, loss = model.train_step(
+            inp, tar_inp, tar_out, tar_mask)
         train_loss(loss)
-        train_eos_accuracy(eos_accuracy(tar_out, predictions))
-        train_avg_error_distance(avg_error_distance(tar_out, predictions))
-
-        if batch % 50 == 0:
-            print(
-                f'Epoch {epoch + 1} Batch {batch} Loss {train_loss.result():.4f} EoS_Accuracy {train_eos_accuracy.result():.4f} Avg Coords Distance: {train_avg_error_distance.result():.4f}')
+        # train_eos_accuracy(eos_accuracy(tar_out, predictions, tar_mask))
+        # train_avg_error_distance(avg_error_distance(tar_out, predictions))
 
     if (epoch + 1) % 5 == 0:
         ckpt_save_path = ckpt_manager.save()

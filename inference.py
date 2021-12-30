@@ -1,5 +1,6 @@
+import matplotlib.pyplot as plt
 import tensorflow as tf
-from data.stroke_utils import MAX_CHAR_LEN, MAX_STROKE_LEN, encode_ascii
+from data.stroke_utils import MAX_CHAR_LEN, MAX_STROKE_LEN, encode_ascii, offsets_to_coords
 from model.transformer import Transformer
 
 model = Transformer()
@@ -21,5 +22,18 @@ enc_input = tf.keras.preprocessing.sequence.pad_sequences(
 start = tf.keras.preprocessing.sequence.pad_sequences(
     [[[0., 0., 1.]]], maxlen=MAX_STROKE_LEN, padding='post')
 
-(coords, eos), attention_weights = model((enc_input, start))
-print(coords)
+(offset, eos), attention_weights = model((enc_input, start))
+output = tf.concat((offset, eos), axis=-1).numpy()
+coords = offsets_to_coords(output[0])
+
+stroke = []
+for x, y, eos in output[0]:
+    stroke.append((x, y))
+    if eos == 1 or True:
+        coords = list(zip(*stroke))
+        plt.plot(coords[0], coords[1], 'k')
+        stroke = []
+
+# plt.plot(current_sample[:, 0], current_sample[:, 1])
+plt.title(text)
+plt.show()

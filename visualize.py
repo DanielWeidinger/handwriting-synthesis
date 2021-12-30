@@ -7,7 +7,7 @@ x = np.load('data/processed/x.npy')
 x_len = np.load('data/processed/x_len.npy')
 
 sample_idx = 20
-current_sample = x[sample_idx][:x_len[sample_idx]]
+current_sample = su.offsets_to_coords(x[sample_idx][:x_len[sample_idx]])
 # current_sample = su.offsets_to_coords(current_sample)
 print(current_sample)
 

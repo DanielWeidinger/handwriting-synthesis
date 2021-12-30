@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
+from tensorflow.keras.losses import Loss
+from tensorflow.python.keras.utils import losses_utils
 
 
 class CustomSchedule(LearningRateSchedule):
@@ -19,6 +21,32 @@ class CustomSchedule(LearningRateSchedule):
         return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
 
+class NegativeLogLikelihood(Loss):
+    def __init__(self, reduction=losses_utils.ReductionV2.AUTO, name="negative_log_loss", epsilon=1e-7):
+        super().__init__(reduction=reduction, name=name)
+        self.epsilon = epsilon
+
+    def call(self, y_true, y_pred):
+        x, y, eos_prob = y_true
+        mixture_weights, stddev1, stddev2, mean1, mean2, correl, eos_prob_pred = y_pred
+        Z = tf.math.square((x - mean1) / stddev1) + tf.math.square((y - mean2) / stddev2) \
+            - (2 * correl * (x - mean1) * (y - mean2) / (stddev1 * stddev2))
+
+        bivarian_gaussian = tf.math.exp(-Z / (2 * (1 - tf.math.square(correl)))) \
+            / (2 * np.pi * stddev1 * stddev2 * tf.math.sqrt(1 - tf.math.square(correl)))
+        bivarian_gaussian *= mixture_weights
+        gaussian_loss = tf.math.log(tf.reduce_sum(
+            bivarian_gaussian, axis=-1, keepdims=True)+self.epsilon)
+
+        bernoulli_loss = tf.where(tf.math.equal(tf.ones_like(
+            eos_prob), eos_prob), eos_prob_pred, 1 - eos_prob_pred)
+        bernoulli_loss = tf.math.log(bernoulli_loss+self.epsilon)
+
+        negative_log_loss = -gaussian_loss - bernoulli_loss
+        return tf.math.reduce_sum(negative_log_loss, axis=-1)
+        # return tf.reduce_mean(tf.math.reduce_sum(negative_log_loss, axis=1))
+
+
 def get_optimizer(d_model):
     learning_rate = CustomSchedule(d_model)
 
@@ -27,24 +55,17 @@ def get_optimizer(d_model):
     return optimizer
 
 
-def loss_func(label, logits, mask, eos_loss_obj, coords_loss_obj):
-    coords_label, eos_prob_label = (label[:, :, :2], label[:, :, 2:])
-    coords_pred, eos_prob_pred = logits
+def loss_func(label, pred, mask, loss_obj):
+    y_true = (label[:, :, 0:1], label[:, :, 1:2], label[:, :, 2:])
+    loss = loss_obj(y_true, pred, sample_weight=mask)
 
-    # End of sentence probability
-    loss_eos = eos_loss_obj(
-        eos_prob_label, eos_prob_pred, sample_weight=mask)
-
-    # Coordinates (regression therefore MSE)
-    loss_coords = coords_loss_obj(
-        coords_label, coords_pred, sample_weight=mask)
-
-    return loss_coords, loss_eos
+    return loss
 
 
-def eos_accuracy(real, pred, threshold=0.8):
+def eos_accuracy(real, pred, mask, threshold=0.8):
     real = tf.cast(real[:, :, 2:], dtype=tf.int64)
     pred = pred[:, :, 2:]
+    pred = tf.matmul(pred, mask)
     accuracies = tf.equal(real, tf.cast(pred > threshold, dtype=tf.int64))
 
     accuracies = tf.cast(accuracies, dtype=tf.float32)

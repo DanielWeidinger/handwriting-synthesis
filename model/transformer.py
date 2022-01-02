@@ -9,8 +9,8 @@ from model.utils import create_look_ahead_mask, create_padding_mask
 
 
 class Transformer(Model):
-    def __init__(self, num_layers=2, d_model=128, num_heads=2, dff=512, input_vocab_size=su.alphabet_len,
-                 pe_input=su.MAX_CHAR_LEN, pe_target=su.MAX_STROKE_LEN, rate=0.1, num_mixtures=10):
+    def __init__(self, num_layers=4, d_model=256, num_heads=8, dff=512, input_vocab_size=su.alphabet_len,
+                 pe_input=su.MAX_CHAR_LEN, pe_target=su.MAX_STROKE_LEN, rate=0.1, num_mixtures=20):
         super().__init__()
 
         self.optimizer = get_optimizer(d_model)

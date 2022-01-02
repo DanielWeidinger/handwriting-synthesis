@@ -64,8 +64,7 @@ for epoch in range(EPOCHS):
 
     # inp -> portuguese, tar -> english
     for batch, (inp, tar_inp, tar_out, tar_mask) in tqdm(enumerate(train_dataset), total=len(train_dataset)):
-        predictions, loss = model.train_step(
-            inp, tar_inp, tar_out, tar_mask)
+        predictions, loss = model.train_step(inp, tar_inp, tar_out, tar_mask)
         train_loss(loss)
         # train_eos_accuracy(eos_accuracy(tar_out, predictions, tar_mask))
         # train_avg_error_distance(avg_error_distance(tar_out, predictions))

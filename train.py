@@ -15,7 +15,7 @@ strokes_out = np.load('data/processed/x_out.npy')
 strokes_len = np.load('data/processed/x_len.npy')
 chars = np.load('data/processed/c.npy')
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 SHUFFLE_BUFFER_SIZE = 100
 TRAIN_SPLIT = 0.8
 

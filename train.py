@@ -52,6 +52,7 @@ if ckpt_manager.latest_checkpoint:
 
 # metrics
 train_loss = tf.keras.metrics.Mean(name='train_loss')
+validation_loss = tf.keras.metrics.Mean(name='validation_loss')
 train_eos_accuracy = tf.keras.metrics.Mean(name='train_accuracy')
 train_avg_error_distance = tf.keras.metrics.Mean(name='train_accuracy')
 
@@ -69,11 +70,15 @@ for epoch in range(EPOCHS):
         # train_eos_accuracy(eos_accuracy(tar_out, predictions, tar_mask))
         # train_avg_error_distance(avg_error_distance(tar_out, predictions))
 
+    for batch, (inp, tar_inp, tar_out, tar_mask) in enumerate(train_dataset):
+        loss = model.validation(inp, tar_inp, tar_out, tar_mask)
+        validation_loss(loss)
+
     if (epoch + 1) % 5 == 0:
         ckpt_save_path = ckpt_manager.save()
         print(f'Saving checkpoint for epoch {epoch+1} at {ckpt_save_path}')
 
     print(
-        f'Epoch {epoch + 1} Loss {train_loss.result():.4f} EoS_Accuracy {train_eos_accuracy.result():.4f} Avg Coords Distance: {train_avg_error_distance.result():.4f}')
+        f'Epoch {epoch + 1} validation_loss {validation_loss.result():.4f} train_loss {train_loss.result():.4f} EoS_Accuracy {train_eos_accuracy.result():.4f} Avg Coords Distance: {train_avg_error_distance.result():.4f}')
 
     print(f'Time taken for 1 epoch: {time.time() - start:.2f} secs\n')

@@ -58,7 +58,7 @@ enc_input = tf.keras.preprocessing.sequence.pad_sequences(
 output = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 output = output.write(0, [0, 0, 1])
 
-divisor = 1
+divisor = 2
 for i in tqdm(tf.range(1, MAX_STROKE_LEN//divisor)):
     # output = tf.transpose(output_array)  # tf.transpose(output_array.stack())
     off_x, off_y, eos = sample(

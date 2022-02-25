@@ -1,43 +1,16 @@
-import tensorflow_probability as tfp
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tqdm import tqdm
 from data.stroke_utils import MAX_CHAR_LEN, MAX_STROKE_LEN, encode_ascii, offsets_to_coords
-from model.transformer import Transformer
+from model.transformer import Transformer, sample_MDN
 
 model = Transformer()
 
 
 def sample(inputs, seed, model):
-    (mixture_weight, stddev1, stddev2, mean1, mean2, correl, end_stroke), _ = model(
-        inputs, training=False)  # [:, -1, :]
-    # = model.parameterize_distributions(
-    #     outputs)
-
+    predictions, _ = model(inputs, training=False)  # [:, -1, :]
     # sample for MDN index from mixture weights
-    mixture_dist = tfp.distributions.Categorical(
-        probs=mixture_weight[0, -1, :])
-    mixture_idx = mixture_dist.sample(seed=seed)
-
-    # retrieve correct distribution values from mixture
-    mean1 = tf.gather(mean1[:, -1, :], mixture_idx, axis=-1)
-    mean2 = tf.gather(mean2[:, -1, :], mixture_idx, axis=-1)
-    stddev1 = tf.gather(stddev1[:, -1, :], mixture_idx, axis=-1)
-    stddev2 = tf.gather(stddev2[:, -1, :], mixture_idx, axis=-1)
-    correl = tf.gather(correl[:, -1, :], mixture_idx, axis=-1)
-
-    # sample for x, y offsets
-    cov_matrix = [[stddev1 * stddev1, correl * stddev1 * stddev2],
-                  [correl * stddev1 * stddev2, stddev2 * stddev2]]
-    bivariate_gaussian_dist = tfp.distributions.MultivariateNormalDiag(
-        loc=[mean1, mean2], scale_diag=cov_matrix)
-    bivariate_sample = bivariate_gaussian_dist.sample(seed=seed)
-    x, y = bivariate_sample[0, 0], bivariate_sample[1, 1]
-
-    # sample for end of stroke
-    bernoulli = tfp.distributions.Bernoulli(probs=end_stroke[0, 0])
-    end_cur_stroke = bernoulli.sample(seed=seed)
-    return [x, y, end_cur_stroke]
+    return sample_MDN(predictions, seed)
 
 
 checkpoint_path = "./checkpoints/train"
@@ -58,7 +31,7 @@ enc_input = tf.keras.preprocessing.sequence.pad_sequences(
 output = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 output = output.write(0, [0, 0, 1])
 
-divisor = 2
+divisor = 10
 for i in tqdm(tf.range(1, MAX_STROKE_LEN//divisor)):
     # output = tf.transpose(output_array)  # tf.transpose(output_array.stack())
     off_x, off_y, eos = sample(
@@ -76,8 +49,8 @@ for point in coords:
     # output = tf.transpose(output_array)  # tf.transpose(output_array.stack())
     stroke.append((point[0], point[1]))
     if point[2] == 1:
-        coords = list(zip(*stroke))
-        plt.plot(coords[0], coords[1], 'k')
+        current_coords = list(zip(*stroke))
+        plt.plot(current_coords[0], current_coords[1], 'k')
         stroke = []
 
 # plt.plot(current_sample[:, 0], current_sample[:, 1])

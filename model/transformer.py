@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow_probability as tfp
 import numpy as np
 from tensorflow.keras import Model
 from data import stroke_utils as su
@@ -96,7 +97,7 @@ class Transformer(Model):
     # batch sizes (the last batch is smaller), use input_signature to specify
     # more generic shapes.
     # (input_signature=[tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64), tf.TensorSpec(shape=(None, None), dtype=tf.int64)])
-    @tf.function()
+    @tf.function
     def train_step(self, inp, tar_inp, tar_out, tar_mask):
         with tf.GradientTape() as tape:
             predictions, _ = self([inp, tar_inp],
@@ -109,9 +110,38 @@ class Transformer(Model):
 
         return predictions, loss
 
-    @tf.function()
-    def validation(self, inp, tar_inp, tar_out, tar_mask):
+    @tf.function
+    def test(self, inp, tar_inp, tar_out, tar_mask):
         predictions, _ = self([inp, tar_inp],
                               training=True)
         loss = loss_func(tar_out, predictions, tar_mask, self.nll)
-        return loss
+        return predictions, loss
+
+
+# @tf.function
+def sample_MDN(predictions, seed):
+    (mixture_weight, stddev1, stddev2, mean1,
+     mean2, correl, end_stroke) = predictions
+    mixture_dist = tfp.distributions.Categorical(
+        probs=mixture_weight)
+    mixture_idx = mixture_dist.sample(seed=seed)
+
+    # retrieve correct distribution values from mixture
+    mean1 = tf.gather(mean1, mixture_idx, axis=-1, batch_dims=2)
+    mean2 = tf.gather(mean2, mixture_idx, axis=-1, batch_dims=2)
+    stddev1 = tf.gather(stddev1, mixture_idx, axis=-1, batch_dims=2)
+    stddev2 = tf.gather(stddev2, mixture_idx, axis=-1, batch_dims=2)
+    correl = tf.gather(correl, mixture_idx, axis=-1, batch_dims=2)
+
+    # sample for x, y offsets
+    cov_matrix = [[stddev1 * stddev1, correl * stddev1 * stddev2],
+                  [correl * stddev1 * stddev2, stddev2 * stddev2]]
+    bivariate_gaussian_dist = tfp.distributions.MultivariateNormalDiag(
+        loc=[mean1, mean2], scale_diag=cov_matrix)
+    bivariate_sample = bivariate_gaussian_dist.sample(seed=seed)
+    x, y = bivariate_sample[0, 0], bivariate_sample[1, 1]
+
+    # sample for end of stroke
+    bernoulli = tfp.distributions.Bernoulli(probs=end_stroke[:, :, 0])
+    end_cur_stroke = bernoulli.sample(seed=seed)
+    return [x, y, end_cur_stroke]

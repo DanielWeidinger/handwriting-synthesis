@@ -43,6 +43,8 @@ class NegativeLogLikelihood(Loss):
 
         bernoulli_likelihood = tf.squeeze(tf.where(
             tf.equal(tf.ones_like(eos_prob), eos_prob), eos_prob_pred, eos_prob_pred))
+        bernoulli_likelihood = tf.clip_by_value(
+            bernoulli_likelihood, self.epsilon, 1)
 
         nll = -(tf.math.log(gmm_likelihood) +
                 tf.math.log(bernoulli_likelihood))
@@ -82,14 +84,25 @@ def loss_func(label, pred, mask, loss_obj):
     return loss
 
 
-def eos_accuracy(real, pred, mask, threshold=0.8):
-    real = tf.cast(real[:, :, 2:], dtype=tf.int64)
-    pred = pred[:, :, 2:]
-    pred = tf.matmul(pred, mask)
-    accuracies = tf.equal(real, tf.cast(pred > threshold, dtype=tf.int64))
+def eos_accuracy(real, pred, mask):
+    real = tf.squeeze(tf.cast(real[:, :, 2:], dtype=tf.int32))
+    _, _, eos_pred = pred
 
-    accuracies = tf.cast(accuracies, dtype=tf.float32)
-    return tf.reduce_sum(accuracies)/accuracies.shape[1]
+    accuracy = tf.cast(tf.reduce_sum(
+        tf.cast(real == eos_pred, dtype=tf.int32)), dtype=tf.float64)/tf.reduce_sum(mask)
+    return accuracy
+
+
+def mean_sqared_error(real, pred, mask):
+    real = real[:, :, :2]
+    x_pred, y_pred, _ = pred
+
+    squared_error = (real[:, :, 0] - x_pred)**2 + (real[:, :, 1] - y_pred)**2
+    squared_error = squared_error[mask == 1]
+
+    mse = tf.reduce_sum(squared_error, axis=-1)/squared_error.shape[0]
+
+    return mse
 
 
 def avg_error_distance(real, pred):

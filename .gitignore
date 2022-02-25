@@ -3,3 +3,4 @@ data/processed/**
 **/__pycache__
 /~
 checkpoints/**
+logs/**
